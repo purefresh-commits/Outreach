@@ -1,24 +1,10 @@
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://dphsubgrjauyujowrlgf.supabase.co";
-const SUPABASE_KEY = "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH";
-
-const sbFetch = async (method, body = null, id = null) => {
-  const url = `${SUPABASE_URL}/rest/v1/contacts${id ? `?id=eq.${id}` : ""}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Prefer": "return=representation",
-    },
-    body: body ? JSON.stringify(body) : null,
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text);
-  return text ? JSON.parse(text) : [];
-};
+const supabase = createClient(
+  "https://dphsubgrjauyujowrlgf.supabase.co",
+  "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH"
+);
 
 const statusColors = {
   "Not Sent": { bg: "#f3f4f6", text: "#374151" },
@@ -65,24 +51,9 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?select=*`, {
-          method: "GET",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json",
-          },
-        });
-        const text = await res.text();
-        console.log("Supabase response:", res.status, text);
-        if (!res.ok) throw new Error(text);
-        const data = JSON.parse(text);
-        setContacts(data || []);
-      } catch (e) {
-        showToast("Failed to load: " + e.message, "error");
-        console.error("Load error:", e);
-      }
+      const { data, error } = await supabase.from("contacts").select("*");
+      if (error) showToast("Failed to load: " + error.message, "error");
+      else setContacts(data || []);
       setLoading(false);
     };
     load();
@@ -100,50 +71,33 @@ export default function App() {
   const submitForm = async () => {
     if (!form.firstName && !form.companyName) return showToast("Please enter at least a name or company", "error");
     setSaving(true);
-    try {
-      if (modal.mode === "add") {
-        const data = await sbFetch("POST", form);
-        setContacts(prev => [...prev, data[0]]);
-        showToast("Contact added! 🥑");
-      } else {
-        const { id, ...rest } = form;
-        const data = await sbFetch("PATCH", rest, id);
-        setContacts(prev => prev.map(c => c.id === id ? data[0] : c));
-        showToast("Contact updated!");
-      }
-    } catch (e) { showToast("Error: " + e.message, "error"); }
+    if (modal.mode === "add") {
+      const { data, error } = await supabase.from("contacts").insert([form]).select();
+      if (error) showToast("Error: " + error.message, "error");
+      else { setContacts(prev => [...prev, data[0]]); showToast("Contact added! 🥑"); }
+    } else {
+      const { id, ...rest } = form;
+      const { data, error } = await supabase.from("contacts").update(rest).eq("id", id).select();
+      if (error) showToast("Error: " + error.message, "error");
+      else { setContacts(prev => prev.map(c => c.id === id ? data[0] : c)); showToast("Contact updated!"); }
+    }
     setSaving(false);
     closeModal();
   };
 
   const deleteContact = async (id) => {
     setSaving(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${id}`, {
-        method: "DELETE",
-        headers: {
-          "apikey": SUPABASE_KEY,
-          "Authorization": `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          "Prefer": "return=representation",
-        }
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err);
-      }
-      setContacts(prev => prev.filter(c => c.id !== id));
-      showToast("Contact deleted");
-    } catch (e) { showToast("Error deleting: " + e.message, "error"); }
+    const { error } = await supabase.from("contacts").delete().eq("id", id);
+    if (error) showToast("Error: " + error.message, "error");
+    else { setContacts(prev => prev.filter(c => c.id !== id)); showToast("Contact deleted"); }
     setSaving(false);
     setDeleteConfirm(null);
   };
 
   const updateStatus = async (id, status) => {
-    try {
-      await sbFetch("PATCH", { status }, id);
-      setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
-    } catch (e) { showToast("Error: " + e.message, "error"); }
+    const { error } = await supabase.from("contacts").update({ status }).eq("id", id);
+    if (error) showToast("Error: " + error.message, "error");
+    else setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
   };
 
   const exportCSV = () => {
@@ -169,71 +123,26 @@ export default function App() {
         const lines = text.split("\n").filter(l => l.trim());
         const headers = lines[0].split(",").map(h => h.replace(/"/g,"").trim().toLowerCase());
         const map = {
-          "first name": "firstName",
-          "firstname": "firstName",
-          "company name": "companyName",
-          "companyname": "companyName",
-          "company": "companyName",
-          "email": "email",
-          "phone": "phone",
-          "city": "city",
-          "type": "type",
-          "source": "source",
-          "status": "status",
-          "follow up 1": "followUp1",
-          "followup1": "followUp1",
-          "follow up 2": "followUp2",
-          "followup2": "followUp2",
-          "last contact": "lastContact",
-          "lastcontact": "lastContact",
+          "first name": "firstName", "firstname": "firstName",
+          "company name": "companyName", "companyname": "companyName", "company": "companyName",
+          "email": "email", "phone": "phone", "city": "city", "type": "type",
+          "source": "source", "status": "status",
+          "follow up 1": "followUp1", "followup1": "followUp1",
+          "follow up 2": "followUp2", "followup2": "followUp2",
+          "last contact": "lastContact", "lastcontact": "lastContact",
           "notes": "notes",
         };
         const imported = lines.slice(1).map(line => {
           const vals = line.split(",").map(v => v.replace(/"/g,"").trim());
-          const contact = {
-            status: "Not Sent",
-            firstName: "",
-            companyName: "",
-            email: "",
-            phone: "",
-            city: "",
-            type: "",
-            source: "",
-            followUp1: "",
-            followUp2: "",
-            lastContact: "",
-            notes: ""
-          };
-          headers.forEach((h, i) => {
-            const key = map[h];
-            if (key) contact[key] = vals[i] || "";
-          });
+          const contact = { status: "Not Sent", firstName:"", companyName:"", email:"", phone:"", city:"", type:"", source:"", followUp1:"", followUp2:"", lastContact:"", notes:"" };
+          headers.forEach((h, i) => { if (map[h]) contact[map[h]] = vals[i] || ""; });
           return contact;
         }).filter(c => c.firstName || c.companyName || c.email);
-
-        if (imported.length === 0) return showToast("No valid contacts found in CSV", "error");
-
-        // Send in batches of 20 to avoid timeout
-        const batchSize = 20;
-        let total = 0;
-        for (let i = 0; i < imported.length; i += batchSize) {
-          const batch = imported.slice(i, i + batchSize);
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`,
-              "Prefer": "return=representation",
-            },
-            body: JSON.stringify(batch),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(JSON.stringify(data));
-          setContacts(prev => [...prev, ...data]);
-          total += data.length;
-        }
-        showToast(`✅ ${total} contacts imported!`);
+        if (imported.length === 0) return showToast("No valid contacts found", "error");
+        const { data, error } = await supabase.from("contacts").insert(imported).select();
+        if (error) throw new Error(error.message);
+        setContacts(prev => [...prev, ...data]);
+        showToast(`✅ ${data.length} contacts imported!`);
       } catch (e) { showToast("Failed to import: " + e.message, "error"); }
     };
     reader.readAsText(file);
