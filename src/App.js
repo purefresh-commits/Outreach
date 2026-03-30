@@ -17,7 +17,13 @@ const sources = ["Instagram", "LinkedIn", "Google Maps", "Email", "Referral", "O
 const STORAGE_KEY = "wg_contacts";
 const emptyContact = { firstName: "", companyName: "", email: "", phone: "", city: "", type: "", source: "", status: "Not Sent", followUp1: "", followUp2: "", lastContact: "", notes: "" };
 
-const openWhatsApp = (contact) => {
+const openSMS = (contact) => {
+  const phone = contact.phone.replace(/[^0-9]/g, "");
+  if (!phone) return alert("No phone number available for this contact.");
+  const message = `Hi! We manufacture avocado products, purees & peppers. We have some offers that could be a great fit for you. Who's the right person to discuss this?\n\n- Natalia | purefresh@worldsgarden.eu | worldsgarden.eu`;
+  const url = `sms:/open?addresses=+${phone}&body=${encodeURIComponent(message)}`;
+  window.open(url, "_blank");
+};
   const phone = contact.phone.replace(/[^0-9]/g, "");
   if (!phone) return alert("No phone number available for this contact.");
   const message = `Hi! 👋\n\nWe are food ingredient manufacturers, avocado products, purees, peppers & more. And we have recently launched some offers that could be a great fit for you.\n\nWho would be the right person to talk to about this?\n\nNatalia Vargas\n📧 purefresh@worldsgarden.eu\n🌐 worldsgarden.eu`;
@@ -237,6 +243,7 @@ export default function App() {
                     </div>
                     <div style={{ display:"flex", gap:"6px" }}>
                       <button onClick={()=>openWhatsApp(c)} style={{ background:"#dcfce7", color:"#166534", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>💬 WA</button>
+                      <button onClick={()=>openSMS(c)} style={{ background:"#dbeafe", color:"#1d4ed8", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>📱 SMS</button>
                       <button onClick={()=>openEdit(c)} style={{ background:"#f0f7e6", color:"#2d4a1e", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>✏️ Edit</button>
                       <button onClick={()=>setDeleteConfirm(c.id)} style={{ background:"#fee2e2", color:"#991b1b", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>🗑</button>
                     </div>
