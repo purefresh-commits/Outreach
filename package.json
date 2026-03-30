@@ -1,4 +1,5 @@
-{ "name": "worldsgarden-crm",
+{
+  "name": "worldsgarden-crm",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
