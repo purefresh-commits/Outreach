@@ -12,12 +12,10 @@ const sbFetch = async (method, body = null, id = null) => {
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
       "Prefer": "return=representation",
-      "X-Client-Info": "supabase-js/2.0.0",
     },
     body: body ? JSON.stringify(body) : null,
   });
   const text = await res.text();
-  console.log(`Supabase ${method} response:`, res.status, text);
   if (!res.ok) throw new Error(text);
   return text ? JSON.parse(text) : [];
 };
@@ -36,25 +34,26 @@ const statusColors = {
 
 const types = ["Restaurant", "Hotel", "Cruise", "Catering", "Other"];
 const sources = ["Instagram", "LinkedIn", "Google Maps", "Email", "Referral", "Other"];
-const STORAGE_KEY = "wg_contacts";
 const emptyContact = { firstName: "", companyName: "", email: "", phone: "", city: "", type: "", source: "", status: "Not Sent", followUp1: "", followUp2: "", lastContact: "", notes: "" };
+
+const openWhatsApp = (contact) => {
+  const phone = contact.phone.replace(/[^0-9]/g, "");
+  if (!phone) return alert("No phone number available for this contact.");
+  const message = `Hi! 👋\n\nWe are food ingredient manufacturers, avocado products, purees, peppers & more. And we have recently launched some offers that could be a great fit for you.\n\nWho would be the right person to talk to about this?\n\nNatalia Vargas\n📧 purefresh@worldsgarden.eu\n🌐 worldsgarden.eu`;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+};
 
 const openSMS = (contact) => {
   const phone = contact.phone.replace(/[^0-9]/g, "");
   if (!phone) return alert("No phone number available for this contact.");
   const message = `Hi! We manufacture avocado products, purees & peppers. We have some offers that could be a great fit for you. Who's the right person to discuss this?\n\n- Natalia | purefresh@worldsgarden.eu | worldsgarden.eu`;
-  const url = `sms:/open?addresses=+${phone}&body=${encodeURIComponent(message)}`;
-  window.open(url, "_blank");
-};
-  const phone = contact.phone.replace(/[^0-9]/g, "");
-  if (!phone) return alert("No phone number available for this contact.");
-  const message = `Hi! 👋\n\nWe are food ingredient manufacturers, avocado products, purees, peppers & more. And we have recently launched some offers that could be a great fit for you.\n\nWho would be the right person to talk to about this?\n\nNatalia Vargas\n📧 purefresh@worldsgarden.eu\n🌐 worldsgarden.eu`;
-  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-  window.open(url, "_blank");
+  window.open(`sms:/open?addresses=+${phone}&body=${encodeURIComponent(message)}`, "_blank");
 };
 
 export default function App() {
   const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("tracker");
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -63,40 +62,49 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  // Load from Supabase on mount
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
         const data = await sbFetch("GET");
         setContacts(data || []);
-      } catch (e) { showToast("Failed to load contacts", "error"); }
+      } catch (e) {
+        showToast("Failed to load contacts: " + e.message, "error");
+      }
       setLoading(false);
     };
     load();
   }, []);
 
-  const addContact = async (contact) => {
-    setSaving(true);
-    try {
-      const data = await sbFetch("POST", contact);
-      setContacts(prev => [...prev, data[0]]);
-      showToast("Contact added! 🥑");
-    } catch { showToast("Failed to add contact", "error"); }
-    setSaving(false);
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const updateContact = async (contact) => {
+  const openAdd = () => { setForm({ ...emptyContact }); setModal({ mode: "add" }); };
+  const openEdit = (c) => { setForm({ ...c }); setModal({ mode: "edit" }); };
+  const closeModal = () => { setModal(null); setForm(emptyContact); };
+
+  const submitForm = async () => {
+    if (!form.firstName && !form.companyName) return showToast("Please enter at least a name or company", "error");
     setSaving(true);
     try {
-      const data = await sbFetch("PATCH", contact, contact.id);
-      setContacts(prev => prev.map(c => c.id === contact.id ? data[0] : c));
-      showToast("Contact updated!");
-    } catch { showToast("Failed to update contact", "error"); }
+      if (modal.mode === "add") {
+        const data = await sbFetch("POST", form);
+        setContacts(prev => [...prev, data[0]]);
+        showToast("Contact added! 🥑");
+      } else {
+        const { id, ...rest } = form;
+        const data = await sbFetch("PATCH", rest, id);
+        setContacts(prev => prev.map(c => c.id === id ? data[0] : c));
+        showToast("Contact updated!");
+      }
+    } catch (e) { showToast("Error: " + e.message, "error"); }
     setSaving(false);
+    closeModal();
   };
 
-  const removeContact = async (id) => {
+  const deleteContact = async (id) => {
     setSaving(true);
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${id}`, {
@@ -105,7 +113,7 @@ export default function App() {
       });
       setContacts(prev => prev.filter(c => c.id !== id));
       showToast("Contact deleted");
-    } catch { showToast("Failed to delete contact", "error"); }
+    } catch (e) { showToast("Error: " + e.message, "error"); }
     setSaving(false);
     setDeleteConfirm(null);
   };
@@ -114,49 +122,8 @@ export default function App() {
     try {
       await sbFetch("PATCH", { status }, id);
       setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
-    } catch { showToast("Failed to update status", "error"); }
+    } catch (e) { showToast("Error: " + e.message, "error"); }
   };
-
-  const importContacts = async (newContacts) => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_KEY,
-          "Authorization": `Bearer ${SUPABASE_KEY}`,
-          "Prefer": "return=representation",
-        },
-        body: JSON.stringify(newContacts),
-      });
-      const data = await res.json();
-      setContacts(prev => [...prev, ...data]);
-      showToast(`✅ ${data.length} contacts imported!`);
-    } catch { showToast("Failed to import contacts", "error"); }
-    setSaving(false);
-  };
-
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const openAdd = () => { setForm({ ...emptyContact, id: Date.now() }); setModal({ mode: "add" }); };
-  const openEdit = (c) => { setForm({ ...c }); setModal({ mode: "edit" }); };
-  const closeModal = () => { setModal(null); setForm(emptyContact); };
-
-  const submitForm = async () => {
-    if (!form.firstName && !form.companyName) return showToast("Please enter at least a name or company", "error");
-    if (modal.mode === "add") {
-      await addContact(form);
-    } else {
-      await updateContact(form);
-    }
-    closeModal();
-  };
-
-  const deleteContact = async (id) => { await removeContact(id); };
 
   const exportCSV = () => {
     const headers = ["First Name","Company Name","Email","Phone","City","Type","Source","Status","Follow Up 1","Follow Up 2","Last Contact","Notes"];
@@ -175,40 +142,38 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const text = evt.target.result;
         const lines = text.split("\n").filter(l => l.trim());
         const headers = lines[0].split(",").map(h => h.replace(/"/g,"").trim().toLowerCase());
         const map = {
-          "first name": "firstName",
-          "company name": "companyName",
-          "company": "companyName",
-          "email": "email",
-          "phone": "phone",
-          "city": "city",
-          "type": "type",
-          "source": "source",
-          "status": "status",
-          "follow up 1": "followUp1",
-          "follow up 2": "followUp2",
-          "last contact": "lastContact",
-          "notes": "notes",
+          "first name": "firstName", "company name": "companyName", "company": "companyName",
+          "email": "email", "phone": "phone", "city": "city", "type": "type",
+          "source": "source", "status": "status", "follow up 1": "followUp1",
+          "follow up 2": "followUp2", "last contact": "lastContact", "notes": "notes",
         };
         const imported = lines.slice(1).map(line => {
           const vals = line.split(",").map(v => v.replace(/"/g,"").trim());
-          const contact = { id: Date.now() + Math.random(), status: "Not Sent", firstName:"", companyName:"", email:"", phone:"", city:"", type:"", source:"", followUp1:"", followUp2:"", lastContact:"", notes:"" };
+          const contact = { status: "Not Sent", firstName:"", companyName:"", email:"", phone:"", city:"", type:"", source:"", followUp1:"", followUp2:"", lastContact:"", notes:"" };
           headers.forEach((h, i) => { if (map[h]) contact[map[h]] = vals[i] || ""; });
           return contact;
         }).filter(c => c.firstName || c.companyName || c.email);
         if (imported.length === 0) return showToast("No valid contacts found in CSV", "error");
-        const updated = [...contacts, ...imported];
-        setContacts(updated);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        showToast(`✅ ${imported.length} contacts imported successfully!`);
-      } catch {
-        showToast("Failed to import CSV. Please check the format.", "error");
-      }
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Prefer": "return=representation",
+          },
+          body: JSON.stringify(imported),
+        });
+        const data = await res.json();
+        setContacts(prev => [...prev, ...data]);
+        showToast(`✅ ${data.length} contacts imported!`);
+      } catch (e) { showToast("Failed to import: " + e.message, "error"); }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -230,21 +195,18 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "Georgia, serif", background: "#f5f0e8", minHeight: "100vh" }}>
-
-      {/* Toast */}
       {toast && (
         <div style={{ position:"fixed", top:"16px", right:"16px", zIndex:9999, background: toast.type==="error"?"#fee2e2":"#dcfce7", color: toast.type==="error"?"#991b1b":"#166534", padding:"10px 18px", borderRadius:"10px", fontWeight:"bold", fontSize:"13px", boxShadow:"0 4px 12px rgba(0,0,0,0.15)" }}>
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
       <div style={{ background:"linear-gradient(135deg,#2d4a1e,#4a7a2e)", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
           <div style={{ color:"#fff", fontSize:"18px", fontWeight:"bold" }}>world's garden 🥑</div>
-          <div style={{ color:"#a8d060", fontSize:"10px", letterSpacing:"2px" }}>OUTREACH CRM</div>
+          <div style={{ color:"#a8d060", fontSize:"10px", letterSpacing:"2px" }}>OUTREACH CRM · {saving ? "Saving..." : "Synced ✓"}</div>
         </div>
-        <div style={{ display:"flex", gap:"8px" }}>
+        <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
           <button onClick={exportCSV} style={{ background:"#c8e880", color:"#2d4a1e", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>⬇️ Export CSV</button>
           <label style={{ background:"#fff", color:"#2d4a1e", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>
             ⬆️ Import CSV
@@ -254,7 +216,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ background:"#2d4a1e", display:"flex", padding:"0 20px", gap:"2px" }}>
         {[["tracker","📊 Contacts"],["template","✉️ Templates"],["instructions","📋 Setup Guide"]].map(([t,l]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{ background:activeTab===t?"#f5f0e8":"transparent", color:activeTab===t?"#2d4a1e":"#a8d060", border:"none", padding:"8px 14px", cursor:"pointer", borderRadius:"8px 8px 0 0", fontSize:"12px", fontWeight:"bold" }}>{l}</button>
@@ -262,10 +223,8 @@ export default function App() {
       </div>
 
       <div style={{ padding:"16px 20px" }}>
-
         {activeTab === "tracker" && (
           <>
-            {/* Stats */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"10px", marginBottom:"16px" }}>
               {[["Total",stats.total,"#2d4a1e"],["Sent",stats.sent,"#1d4ed8"],["Replied",stats.replied,"#166534"],["Samples",stats.samples,"#6b21a8"],["Converted",stats.converted,"#065f46"]].map(([l,v,c]) => (
                 <div key={l} style={{ background:"#fff", borderRadius:"10px", padding:"12px", textAlign:"center", borderTop:`3px solid ${c}` }}>
@@ -275,7 +234,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Search & Filter */}
             <div style={{ display:"flex", gap:"8px", marginBottom:"14px", flexWrap:"wrap" }}>
               <input placeholder="🔍 Search..." value={search} onChange={e=>setSearch(e.target.value)}
                 style={{ flex:1, minWidth:"160px", border:"1px solid #ddd", borderRadius:"8px", padding:"7px 12px", fontSize:"13px" }} />
@@ -286,7 +244,9 @@ export default function App() {
               </select>
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div style={{ textAlign:"center", padding:"60px", color:"#666" }}>Loading contacts from cloud... ☁️</div>
+            ) : filtered.length === 0 ? (
               <div style={{ textAlign:"center", padding:"60px", background:"#fff", borderRadius:"12px" }}>
                 <div style={{ fontSize:"48px", marginBottom:"12px" }}>🥑</div>
                 <div style={{ color:"#2d4a1e", fontWeight:"bold", fontSize:"16px", marginBottom:"8px" }}>No contacts yet!</div>
@@ -306,13 +266,13 @@ export default function App() {
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
                       {c.source && <span style={{ background:"#f0f7e6", color:"#4a7a2e", fontSize:"10px", padding:"2px 8px", borderRadius:"10px" }}>{c.source}</span>}
-                      <select value={c.status} onChange={e=>updateStatus(c.id,e.target.value)}
-                        style={{ border:"none", borderRadius:"12px", padding:"4px 8px", fontSize:"11px", fontWeight:"bold", background:statusColors[c.status]?.bg, color:statusColors[c.status]?.text, cursor:"pointer" }}>
+                      <select value={c.status||"Not Sent"} onChange={e=>updateStatus(c.id,e.target.value)}
+                        style={{ border:"none", borderRadius:"12px", padding:"4px 8px", fontSize:"11px", fontWeight:"bold", background:statusColors[c.status]?.bg||"#f3f4f6", color:statusColors[c.status]?.text||"#374151", cursor:"pointer" }}>
                         {Object.keys(statusColors).map(s=><option key={s}>{s}</option>)}
                       </select>
                       {c.notes && <span style={{ fontSize:"11px", color:"#888", maxWidth:"100px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={c.notes}>📝 {c.notes}</span>}
                     </div>
-                    <div style={{ display:"flex", gap:"6px" }}>
+                    <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
                       <button onClick={()=>openWhatsApp(c)} style={{ background:"#dcfce7", color:"#166534", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>💬 WA</button>
                       <button onClick={()=>openSMS(c)} style={{ background:"#dbeafe", color:"#1d4ed8", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>📱 SMS</button>
                       <button onClick={()=>openEdit(c)} style={{ background:"#f0f7e6", color:"#2d4a1e", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>✏️ Edit</button>
@@ -328,8 +288,8 @@ export default function App() {
         {activeTab === "template" && (
           <div style={{ maxWidth:"620px", margin:"0 auto" }}>
             {[
-              { label:"📧 Email 1 — Initial Outreach", subject:'{{First Name}}, thought this might be relevant', body:`Hi {{First Name}},\n\nI wanted to reach out because we supply premium Mexican food products — authentic guacamole, smashed avocado, tomatillo, jalapeño & more — with 24hr delivery across the US and no minimum order.\n\nWe're currently offering a special discount on our Authentic Guacamole for new foodservice partners at {{Company Name}}. We'd also love to send you FREE samples so you can taste the quality before committing to anything.\n\nAre you the right person to discuss a cost-effective food supply solution designed to maintain high quality, reduce waste and improve margins? If not, could you point me to the right contact?\n\nLooking forward to hearing from you!\n\nThe World's Garden Team\n📧 purefresh@worldsgarden.eu\n📞 (832) 217-9616\n🌐 worldsgarden.eu` },
-              { label:"📧 Email 2 — Follow Up (Day 3)", subject:"Just checking in, {{First Name}}", body:`Hi {{First Name}},\n\nI reached out a few days ago about our premium Mexican food products and wanted to make sure my email didn't get buried in your inbox!\n\nWe still have a special discounted price on our Authentic Guacamole available for new partners at {{Company Name}}. We'd love to send you FREE samples — no commitment needed.\n\nWould you be the right person to chat with, or could you point me to who handles food purchasing?\n\nLooking forward to hearing from you!\n\nThe World's Garden Team\n📧 purefresh@worldsgarden.eu\n📞 (832) 217-9616\n🌐 worldsgarden.eu` },
+              { label:"📧 Email 1 — Initial Outreach", subject:'{{First Name}}, thought this might be relevant', body:`Hi {{First Name}},\n\nI wanted to reach out because we supply premium Mexican food products — authentic guacamole, smashed avocado, tomatillo, jalapeño & more — with 24hr delivery across the US and no minimum order.\n\nWe're currently offering a special discount on our Authentic Guacamole for new foodservice partners at {{Company Name}}. We'd also love to send you FREE samples so you can taste the quality before committing to anything.\n\nAre you the right person to discuss a cost-effective food supply solution designed to maintain high quality, reduce waste and improve margins? If not, could you point me to the right contact?\n\nLooking forward to hearing from you!\n\nNatalia Vargas\n📧 purefresh@worldsgarden.eu\n📞 (832) 217-9616\n🌐 worldsgarden.eu` },
+              { label:"📧 Email 2 — Follow Up (Day 3)", subject:"Just checking in, {{First Name}}", body:`Hi {{First Name}},\n\nI reached out a few days ago about our premium Mexican food products and wanted to make sure my email didn't get buried in your inbox!\n\nWe still have a special discounted price on our Authentic Guacamole available for new partners at {{Company Name}}. We'd love to send you FREE samples — no commitment needed.\n\nWould you be the right person to chat with, or could you point me to who handles food purchasing?\n\nNatalia Vargas\n📧 purefresh@worldsgarden.eu\n📞 (832) 217-9616\n🌐 worldsgarden.eu` },
             ].map(t => (
               <div key={t.label} style={{ background:"#fff", borderRadius:"12px", padding:"20px", marginBottom:"16px", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
                 <div style={{ fontWeight:"bold", color:"#2d4a1e", marginBottom:"14px", fontSize:"14px" }}>{t.label}</div>
@@ -346,7 +306,7 @@ export default function App() {
           <div style={{ maxWidth:"580px", margin:"0 auto", background:"#fff", borderRadius:"12px", padding:"24px", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
             <h2 style={{ color:"#2d4a1e", marginBottom:"20px", fontSize:"16px" }}>📋 How to use with Gmail + YAMM</h2>
             {[
-              ["1","Add your contacts","Use the + Add Contact button. Everything saves to your browser automatically."],
+              ["1","Add your contacts","Use the + Add Contact button. Everything saves to the cloud automatically and syncs across all devices."],
               ["2","Update status as you go","Update each contact's status as you send emails and get replies."],
               ["3","Export to CSV","Click Export CSV to download your contact list whenever you need to send emails."],
               ["4","Import into Google Sheets","sheets.google.com → New Sheet → File → Import → Upload your CSV."],
@@ -370,7 +330,6 @@ export default function App() {
         )}
       </div>
 
-      {/* ADD/EDIT MODAL */}
       {modal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
           <div style={{ background:"#fff", borderRadius:"16px", padding:"24px", width:"100%", maxWidth:"500px", maxHeight:"90vh", overflowY:"auto" }}>
@@ -419,7 +378,6 @@ export default function App() {
         </div>
       )}
 
-      {/* DELETE CONFIRM */}
       {deleteConfirm && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
           <div style={{ background:"#fff", borderRadius:"16px", padding:"24px", maxWidth:"360px", textAlign:"center" }}>
