@@ -29,7 +29,15 @@ const openWhatsApp = (contact) => {
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
 };
 
-const openSMS = (contact) => {
+const openEmail = async (contact, updateStatusFn) => {
+  const email = contact.email;
+  if (!email) return alert("No email address available for this contact.");
+  const name = contact.firstName || "there";
+  const subject = encodeURIComponent(`${name}, thought this might be relevant`);
+  const body = encodeURIComponent(`Hello,\n\nWe are food product manufacturers and have an interesting offer that we believe could be a great fit for your company.\n\n* Excellent prices\n* 24-hour delivery across Canada\n* No minimum order required\n* FREE samples available to try our products\n\nAre you the right person to discuss a cost-effective food supply solution designed to maintain high quality, reduce waste, and improve margins?\n\nIf not, could you please point me to the appropriate contact to continue this conversation?\n\nThank you in advance for your reply.\n\nNatalia\nSales | worldsgarden.eu`);
+  window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${body}`, "_blank");
+  await updateStatusFn(contact.id, "Sent");
+};
   const phone = contact.phone.replace(/[^0-9]/g, "");
   if (!phone) return alert("No phone number available for this contact.");
   const message = `Hi! We manufacture avocado products, purees & peppers. We have some offers that could be a great fit for you. Who's the right person to discuss this?\n\n- Natalia | purefresh@worldsgarden.eu | worldsgarden.eu`;
@@ -243,6 +251,7 @@ export default function App() {
                       {c.notes && <span style={{ fontSize:"11px", color:"#888", maxWidth:"100px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={c.notes}>📝 {c.notes}</span>}
                     </div>
                     <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
+                      <button onClick={()=>openEmail(c, updateStatus)} style={{ background:"#fef9c3", color:"#854d0e", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>📧 Email</button>
                       <button onClick={()=>openWhatsApp(c)} style={{ background:"#dcfce7", color:"#166534", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>💬 WA</button>
                       <button onClick={()=>openSMS(c)} style={{ background:"#dbeafe", color:"#1d4ed8", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>📱 SMS</button>
                       <button onClick={()=>openEdit(c)} style={{ background:"#f0f7e6", color:"#2d4a1e", border:"none", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"12px" }}>✏️ Edit</button>
