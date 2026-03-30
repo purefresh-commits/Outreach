@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_KEY;
+const SUPABASE_URL = "https://dphsubgrjauyujowrlgf.supabase.co";
+const SUPABASE_KEY = "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH";
 
 const sbFetch = async (method, body = null, id = null) => {
   const url = `${SUPABASE_URL}/rest/v1/contacts${id ? `?id=eq.${id}` : ""}`;
@@ -12,10 +12,12 @@ const sbFetch = async (method, body = null, id = null) => {
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
       "Prefer": "return=representation",
+      "X-Client-Info": "supabase-js/2.0.0",
     },
     body: body ? JSON.stringify(body) : null,
   });
   const text = await res.text();
+  console.log(`Supabase ${method} response:`, res.status, text);
   if (!res.ok) throw new Error(text);
   return text ? JSON.parse(text) : [];
 };
