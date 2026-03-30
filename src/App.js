@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
-const SUPABASE_URL = "https://dphsubgrjauyujowrlgf.supabase.co";
-const SUPABASE_KEY = "sb_secret_09B9TsByBSuuE8FMP2kDEQ_xv3TEgCT";
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_KEY;
 
 const sbFetch = async (method, body = null, id = null) => {
   const url = `${SUPABASE_URL}/rest/v1/contacts${id ? `?id=eq.${id}` : ""}`;
