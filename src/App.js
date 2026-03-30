@@ -66,10 +66,22 @@ export default function App() {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await sbFetch("GET");
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?select=*`, {
+          method: "GET",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+          },
+        });
+        const text = await res.text();
+        console.log("Supabase response:", res.status, text);
+        if (!res.ok) throw new Error(text);
+        const data = JSON.parse(text);
         setContacts(data || []);
       } catch (e) {
-        showToast("Failed to load contacts: " + e.message, "error");
+        showToast("Failed to load: " + e.message, "error");
+        console.error("Load error:", e);
       }
       setLoading(false);
     };
@@ -157,31 +169,71 @@ export default function App() {
         const lines = text.split("\n").filter(l => l.trim());
         const headers = lines[0].split(",").map(h => h.replace(/"/g,"").trim().toLowerCase());
         const map = {
-          "first name": "firstName", "company name": "companyName", "company": "companyName",
-          "email": "email", "phone": "phone", "city": "city", "type": "type",
-          "source": "source", "status": "status", "follow up 1": "followUp1",
-          "follow up 2": "followUp2", "last contact": "lastContact", "notes": "notes",
+          "first name": "firstName",
+          "firstname": "firstName",
+          "company name": "companyName",
+          "companyname": "companyName",
+          "company": "companyName",
+          "email": "email",
+          "phone": "phone",
+          "city": "city",
+          "type": "type",
+          "source": "source",
+          "status": "status",
+          "follow up 1": "followUp1",
+          "followup1": "followUp1",
+          "follow up 2": "followUp2",
+          "followup2": "followUp2",
+          "last contact": "lastContact",
+          "lastcontact": "lastContact",
+          "notes": "notes",
         };
         const imported = lines.slice(1).map(line => {
           const vals = line.split(",").map(v => v.replace(/"/g,"").trim());
-          const contact = { status: "Not Sent", firstName:"", companyName:"", email:"", phone:"", city:"", type:"", source:"", followUp1:"", followUp2:"", lastContact:"", notes:"" };
-          headers.forEach((h, i) => { if (map[h]) contact[map[h]] = vals[i] || ""; });
+          const contact = {
+            status: "Not Sent",
+            firstName: "",
+            companyName: "",
+            email: "",
+            phone: "",
+            city: "",
+            type: "",
+            source: "",
+            followUp1: "",
+            followUp2: "",
+            lastContact: "",
+            notes: ""
+          };
+          headers.forEach((h, i) => {
+            const key = map[h];
+            if (key) contact[key] = vals[i] || "";
+          });
           return contact;
         }).filter(c => c.firstName || c.companyName || c.email);
+
         if (imported.length === 0) return showToast("No valid contacts found in CSV", "error");
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Prefer": "return=representation",
-          },
-          body: JSON.stringify(imported),
-        });
-        const data = await res.json();
-        setContacts(prev => [...prev, ...data]);
-        showToast(`✅ ${data.length} contacts imported!`);
+
+        // Send in batches of 20 to avoid timeout
+        const batchSize = 20;
+        let total = 0;
+        for (let i = 0; i < imported.length; i += batchSize) {
+          const batch = imported.slice(i, i + batchSize);
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+              "Prefer": "return=representation",
+            },
+            body: JSON.stringify(batch),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(JSON.stringify(data));
+          setContacts(prev => [...prev, ...data]);
+          total += data.length;
+        }
+        showToast(`✅ ${total} contacts imported!`);
       } catch (e) { showToast("Failed to import: " + e.message, "error"); }
     };
     reader.readAsText(file);
