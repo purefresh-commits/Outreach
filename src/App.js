@@ -107,13 +107,22 @@ export default function App() {
   const deleteContact = async (id) => {
     setSaving(true);
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${id}`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${id}`, {
         method: "DELETE",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=representation",
+        }
       });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
       setContacts(prev => prev.filter(c => c.id !== id));
       showToast("Contact deleted");
-    } catch (e) { showToast("Error: " + e.message, "error"); }
+    } catch (e) { showToast("Error deleting: " + e.message, "error"); }
     setSaving(false);
     setDeleteConfirm(null);
   };
