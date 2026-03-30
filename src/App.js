@@ -1,5 +1,24 @@
 import { useState, useEffect } from "react";
 
+const SUPABASE_URL = "https://dphsubgrjauyujowrlgf.supabase.co";
+const SUPABASE_KEY = "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH";
+
+const sbFetch = async (method, body = null, id = null) => {
+  const url = `${SUPABASE_URL}/rest/v1/contacts${id ? `?id=eq.${id}` : ""}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Prefer": method === "POST" ? "return=representation" : "return=representation",
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
 const statusColors = {
   "Not Sent": { bg: "#f3f4f6", text: "#374151" },
   "Sent": { bg: "#dbeafe", text: "#1d4ed8" },
@@ -41,20 +60,79 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  // Load from localStorage on mount
+  // Load from Supabase on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setContacts(JSON.parse(saved));
-    } catch {}
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await sbFetch("GET");
+        setContacts(data || []);
+      } catch (e) { showToast("Failed to load contacts", "error"); }
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  // Save to localStorage whenever contacts change
-  useEffect(() => {
+  const addContact = async (contact) => {
+    setSaving(true);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
-    } catch {}
-  }, [contacts]);
+      const data = await sbFetch("POST", contact);
+      setContacts(prev => [...prev, data[0]]);
+      showToast("Contact added! 🥑");
+    } catch { showToast("Failed to add contact", "error"); }
+    setSaving(false);
+  };
+
+  const updateContact = async (contact) => {
+    setSaving(true);
+    try {
+      const data = await sbFetch("PATCH", contact, contact.id);
+      setContacts(prev => prev.map(c => c.id === contact.id ? data[0] : c));
+      showToast("Contact updated!");
+    } catch { showToast("Failed to update contact", "error"); }
+    setSaving(false);
+  };
+
+  const removeContact = async (id) => {
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+      setContacts(prev => prev.filter(c => c.id !== id));
+      showToast("Contact deleted");
+    } catch { showToast("Failed to delete contact", "error"); }
+    setSaving(false);
+    setDeleteConfirm(null);
+  };
+
+  const updateStatus = async (id, status) => {
+    try {
+      await sbFetch("PATCH", { status }, id);
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    } catch { showToast("Failed to update status", "error"); }
+  };
+
+  const importContacts = async (newContacts) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Prefer": "return=representation",
+        },
+        body: JSON.stringify(newContacts),
+      });
+      const data = await res.json();
+      setContacts(prev => [...prev, ...data]);
+      showToast(`✅ ${data.length} contacts imported!`);
+    } catch { showToast("Failed to import contacts", "error"); }
+    setSaving(false);
+  };
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -65,27 +143,17 @@ export default function App() {
   const openEdit = (c) => { setForm({ ...c }); setModal({ mode: "edit" }); };
   const closeModal = () => { setModal(null); setForm(emptyContact); };
 
-  const submitForm = () => {
+  const submitForm = async () => {
     if (!form.firstName && !form.companyName) return showToast("Please enter at least a name or company", "error");
     if (modal.mode === "add") {
-      setContacts(prev => [...prev, { ...form, id: Date.now() }]);
-      showToast("Contact added! 🥑");
+      await addContact(form);
     } else {
-      setContacts(prev => prev.map(c => c.id === form.id ? form : c));
-      showToast("Contact updated!");
+      await updateContact(form);
     }
     closeModal();
   };
 
-  const deleteContact = (id) => {
-    setContacts(prev => prev.filter(c => c.id !== id));
-    setDeleteConfirm(null);
-    showToast("Contact deleted");
-  };
-
-  const updateStatus = (id, status) => {
-    setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
-  };
+  const deleteContact = async (id) => { await removeContact(id); };
 
   const exportCSV = () => {
     const headers = ["First Name","Company Name","Email","Phone","City","Type","Source","Status","Follow Up 1","Follow Up 2","Last Contact","Notes"];
