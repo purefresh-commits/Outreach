@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   "https://dphsubgrjauyujowrlgf.supabase.co",
-  "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH"
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwaHN1YmdyamF1eXVqb3dybGdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTk0MTAsImV4cCI6MjA5MDQ3NTQxMH0.bbkcgkQ8w1Qu5FKHvymWGTkGO_x2fsyLRtXKjE8LvIk"
 );
 
 const statusColors = {
