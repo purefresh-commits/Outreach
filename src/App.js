@@ -74,7 +74,7 @@ export default function App() {
   };
 
   const exportCSV = () => {
-    const headers = ["First Name","Company","Email","Phone","City","Type","Source","Status","Follow Up 1","Follow Up 2","Last Contact","Notes"];
+    const headers = ["First Name","Company Name","Email","Phone","City","Type","Source","Status","Follow Up 1","Follow Up 2","Last Contact","Notes"];
     const rows = contacts.map(r =>
       [r.firstName,r.companyName,r.email,r.phone,r.city,r.type,r.source,r.status,r.followUp1,r.followUp2,r.lastContact,r.notes]
         .map(v => `"${v||""}"`).join(",")
@@ -84,6 +84,49 @@ export default function App() {
     a.href = URL.createObjectURL(blob);
     a.download = "worldsgarden_outreach.csv";
     a.click();
+  };
+
+  const importCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target.result;
+        const lines = text.split("\n").filter(l => l.trim());
+        const headers = lines[0].split(",").map(h => h.replace(/"/g,"").trim().toLowerCase());
+        const map = {
+          "first name": "firstName",
+          "company name": "companyName",
+          "company": "companyName",
+          "email": "email",
+          "phone": "phone",
+          "city": "city",
+          "type": "type",
+          "source": "source",
+          "status": "status",
+          "follow up 1": "followUp1",
+          "follow up 2": "followUp2",
+          "last contact": "lastContact",
+          "notes": "notes",
+        };
+        const imported = lines.slice(1).map(line => {
+          const vals = line.split(",").map(v => v.replace(/"/g,"").trim());
+          const contact = { id: Date.now() + Math.random(), status: "Not Sent", firstName:"", companyName:"", email:"", phone:"", city:"", type:"", source:"", followUp1:"", followUp2:"", lastContact:"", notes:"" };
+          headers.forEach((h, i) => { if (map[h]) contact[map[h]] = vals[i] || ""; });
+          return contact;
+        }).filter(c => c.firstName || c.companyName || c.email);
+        if (imported.length === 0) return showToast("No valid contacts found in CSV", "error");
+        const updated = [...contacts, ...imported];
+        setContacts(updated);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        showToast(`✅ ${imported.length} contacts imported successfully!`);
+      } catch {
+        showToast("Failed to import CSV. Please check the format.", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const filtered = contacts.filter(c => {
@@ -118,7 +161,11 @@ export default function App() {
         </div>
         <div style={{ display:"flex", gap:"8px" }}>
           <button onClick={exportCSV} style={{ background:"#c8e880", color:"#2d4a1e", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>⬇️ Export CSV</button>
-          <button onClick={openAdd} style={{ background:"#fff", color:"#2d4a1e", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>+ Add Contact</button>
+          <label style={{ background:"#fff", color:"#2d4a1e", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>
+            ⬆️ Import CSV
+            <input type="file" accept=".csv" onChange={importCSV} style={{ display:"none" }} />
+          </label>
+          <button onClick={openAdd} style={{ background:"#4a7a2e", color:"#fff", border:"none", borderRadius:"20px", padding:"7px 14px", fontWeight:"bold", fontSize:"11px", cursor:"pointer" }}>+ Add Contact</button>
         </div>
       </div>
 
