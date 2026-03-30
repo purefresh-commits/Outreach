@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 const SUPABASE_URL = "https://dphsubgrjauyujowrlgf.supabase.co";
-const SUPABASE_KEY = "sb_publishable_r3-B9EtZ-pYo0-ScrjdPtQ_vvfbzBtH";
+const SUPABASE_KEY = "sb_secret_09B9TsByBSuuE8FMP2kDEQ_xv3TEgCT";
 
 const sbFetch = async (method, body = null, id = null) => {
   const url = `${SUPABASE_URL}/rest/v1/contacts${id ? `?id=eq.${id}` : ""}`;
@@ -11,12 +11,13 @@ const sbFetch = async (method, body = null, id = null) => {
       "Content-Type": "application/json",
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Prefer": method === "POST" ? "return=representation" : "return=representation",
+      "Prefer": "return=representation",
     },
     body: body ? JSON.stringify(body) : null,
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const text = await res.text();
+  if (!res.ok) throw new Error(text);
+  return text ? JSON.parse(text) : [];
 };
 
 const statusColors = {
